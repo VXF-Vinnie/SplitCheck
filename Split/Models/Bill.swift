@@ -4,7 +4,13 @@ import SwiftData
 @Model
 final class Bill {
     var date: Date
-    var tax: Decimal          // Decision 1: one bill-level tax amount
+    var tax: Decimal          // Decision 1: one bill-level tax amount (always DOLLARS)
+
+    // How the user entered tax. If they typed a percent, we keep the rate so the
+    // dollar amount can be recalculated when items change (10% of a bigger subtotal
+    // is a bigger tax). Defaults keep old saved bills loading (lightweight migration).
+    var taxIsPercent: Bool = true
+    var taxRate: Decimal = 0  // e.g. 8.6 means 8.6%; only used when taxIsPercent
     var tipPercent: Decimal   // Decision 2: store both...
     var tipAmount: Decimal    // ...and compute whichever the user didn't enter
 
