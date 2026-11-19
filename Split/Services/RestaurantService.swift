@@ -85,7 +85,13 @@ enum RestaurantError: LocalizedError {
 // MARK: - The service
 
 struct RestaurantService {
-    private let endpoint = "https://overpass-api.de/api/interpreter"
+    // Overpass is run by volunteers on a few public servers. The main one is sometimes
+    // overloaded and times out, so we try it first and fall back to a mirror.
+    // Same API, same JSON; only the address differs.
+    private let endpoints = [
+        "https://overpass-api.de/api/interpreter",
+        "https://overpass.private.coffee/api/interpreter"
+    ]
 
     /// Restaurants within `radiusMeters` of `coordinate`, closest first.
     func fetchRestaurants(near coordinate: CLLocationCoordinate2D,
@@ -97,40 +103,20 @@ struct RestaurantService {
         // center point; at most 50."
         // The coordinates come from LocationService, never typed in by us.
         let query = """
-        [out:json][timeout:15];
+        [out:json][timeout:10];
         nwr["amenity"~"^(restaurant|fast_food|cafe)$"](around:\(radiusMeters),\(coordinate.latitude),\(coordinate.longitude));
         out center 50;
         """
 
-        // STEP 2: put the query in the URL as ?data=... URLComponents handles the
-        // escaping of spaces, quotes and brackets for us.
-        var components = URLComponents(string: endpoint)!
-        components.queryItems = [URLQueryItem(name: "data", value: query)]
-        guard let url = components.url else { throw RestaurantError.badResponse }
-
-        var request = URLRequest(url: url)
-        // Overpass asks apps to identify themselves; it's a shared free server.
-        request.setValue("Split-CSE335-student-project", forHTTPHeaderField: "User-Agent")
-        request.timeoutInterval = 20
-
-        // STEP 3: the network call (the 5-point line). `await` pauses here without
-        // freezing the UI until the server answers.
-        let (data, response) = try await URLSession.shared.data(for: request)
-
-        // 200 = OK. Anything else (429 = too many requests, 504 = server busy) is a failure.
-        guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
-            throw RestaurantError.badResponse
-        }
+        // STEPS 2 + 3: send the request, trying each server until one answers.
+        let data = try await send(query)
 
         // STEP 4: decode the JSON bytes into our structs (the 10-point line).
-        // -------------------------------------------------------------------
-        // YOUR TURN (1 line): use JSONDecoder to turn `data` into an OverpassResponse.
-        //   Shape: let decoded = try JSONDecoder().decode(______.self, from: ______)
-        //   The first blank is the TOP-LEVEL struct (the one with `elements`).
-        // Delete the #warning and the placeholder line when done.
-        #warning("YOUR TURN: write the JSONDecoder line")
-        let decoded = OverpassResponse(elements: [])
-        // -------------------------------------------------------------------
+        // (written by Vincent) "Decode the bytes in `data` as an OverpassResponse."
+        // We decode the OUTERMOST shape (the object holding `elements`), then step 5
+        // walks through decoded.elements one restaurant at a time.
+        // If the JSON doesn't match the structs, this throws and the user sees an error.
+        let decoded = try JSONDecoder().decode(OverpassResponse.self, from: data)
 
         // STEP 5: map raw elements -> RestaurantResult, skipping anything unusable.
         let here = CLLocation(latitude: coordinate.latitude, longitude: coordinate.longitude)
@@ -155,6 +141,39 @@ struct RestaurantService {
 
         guard !results.isEmpty else { throw RestaurantError.noResults }
         return results.sorted { $0.distanceMeters < $1.distanceMeters }
+    }
+
+    /// Sends the query to the first server that answers with 200 OK and returns the raw bytes.
+    private func send(_ query: String) async throws -> Data {
+        for endpoint in endpoints {
+            // Put the query in the URL as ?data=... URLComponents handles the
+            // escaping of spaces, quotes and brackets for us.
+            var components = URLComponents(string: endpoint)!
+            components.queryItems = [URLQueryItem(name: "data", value: query)]
+            guard let url = components.url else { continue }
+
+            var request = URLRequest(url: url)
+            // Overpass asks apps to identify themselves; it's a shared free server.
+            request.setValue("Split-CSE335-student-project", forHTTPHeaderField: "User-Agent")
+            // Give up on a slow server after 12s so the mirror still has time.
+            request.timeoutInterval = 12
+
+            do {
+                // The network call (the 5-point line). `await` pauses here without
+                // freezing the UI until the server answers.
+                let (data, response) = try await URLSession.shared.data(for: request)
+
+                // 200 = OK. Anything else (429 = too many requests, 504 = busy) -> try the next server.
+                if let http = response as? HTTPURLResponse, http.statusCode == 200 {
+                    return data
+                }
+            } catch {
+                // Timeout or connection error on this server -> try the next one.
+                continue
+            }
+        }
+        // Every server failed.
+        throw RestaurantError.badResponse
     }
 
     /// Builds "500 Mill Ave, Tempe" from whatever address tags exist.
