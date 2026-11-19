@@ -19,6 +19,8 @@ struct EditBillView: View {
     //what the user typed in the tax field, as text. The ViewModel turns it into
     //a Decimal and decides whether it's a percent or dollars.
     @State private var taxText = ""
+    //opens the Select Restaurant sheet (map + API results).
+    @State private var showRestaurantPicker = false
 
     init(bill: Bill, context: ModelContext) {
         _viewModel = State(initialValue: EditBillViewModel(bill: bill, context: context))
@@ -48,6 +50,30 @@ struct EditBillView: View {
                         .background(RoundedRectangle(cornerRadius: 9)
                             .stroke(Color.secondary.opacity(0.3)))
                 }
+
+                //--- Restaurant: tap to open the map sheet ---
+                //shows the saved restaurant (from SwiftData) once one is picked.
+                Button { showRestaurantPicker = true } label: {
+                    HStack(spacing: 12) {
+                        Image(systemName: "mappin.and.ellipse")
+                            .font(.title3)
+                            .foregroundStyle(.orange)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(viewModel.bill.restaurant?.name ?? "Choose restaurant")
+                                .font(.subheadline.weight(.medium))
+                                .foregroundStyle(.primary)
+                            Text(viewModel.bill.restaurant?.address ?? "Find nearby places on a map")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                        Image(systemName: "chevron.right").foregroundStyle(.secondary)
+                    }
+                    .padding(12)
+                    .background(RoundedRectangle(cornerRadius: 12)
+                        .stroke(Color.secondary.opacity(0.3)))
+                }
+                .buttonStyle(.plain)
 
                 //--- Items ---
                 Text("Items").font(.headline)
@@ -167,6 +193,9 @@ struct EditBillView: View {
         }
         .sheet(item: $editorMode) { mode in
             AddEditItemView(viewModel: viewModel, mode: mode)
+        }
+        .sheet(isPresented: $showRestaurantPicker) {
+            SelectRestaurantView(bill: viewModel.bill, context: context)
         }
         //load the saved tax mode/value so reopening a bill shows what was entered
         .onAppear {
