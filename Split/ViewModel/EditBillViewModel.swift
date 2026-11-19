@@ -42,6 +42,7 @@ final class EditBillViewModel {
         context.insert(item)
         bill.items.append(item)
         recalculateTax()   // subtotal changed, so a percent tax must change too
+        recalculateTip()   // ...and so must a percent tip
         return save()
     }
 
@@ -55,6 +56,7 @@ final class EditBillViewModel {
         item.price = price
         item.quantity = quantity
         recalculateTax()
+        recalculateTip()
         return save()
     }
 
@@ -64,6 +66,7 @@ final class EditBillViewModel {
         bill.items.removeAll { $0.persistentModelID == item.persistentModelID }
         context.delete(item)
         recalculateTax()
+        recalculateTip()
         save()
     }
 
@@ -112,6 +115,13 @@ final class EditBillViewModel {
         // Round ONCE, at the end, on the dollar result. Rounding the rate first
         // (0.0825 -> 0.08) would give $3.20, which is wrong.
         bill.tax = (subtotal * bill.taxRate / 100).roundedToCents()
+    }
+
+    /// Same rule as tax: a percent tip follows the subtotal; a fixed-dollar tip doesn't.
+    /// (TipViewModel sets the tip; this only keeps it correct when items change.)
+    private func recalculateTip() {
+        guard bill.tipIsPercent else { return }
+        bill.tipAmount = (subtotal * bill.tipPercent / 100).roundedToCents()
     }
 
     // MARK: - Helpers

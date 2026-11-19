@@ -132,16 +132,10 @@ struct RestaurantService {
         }
 
         // STEP 4: decode the JSON bytes into our structs (the 10-point line).
-        // -------------------------------------------------------------------
-        // YOUR TURN (1 line), round 2. Same shape as your Overpass line:
-        //   let decoded = try JSONDecoder().decode(______.self, from: data)
-        // But look at the JSON above: what's the OUTERMOST thing now? An object { }
-        // with a key inside, or a list [ ] of places? How do you write
-        // "a list of NominatimPlace" as a Swift type?
-        // Delete the #warning and the placeholder line when done.
-        
+        // (written by Vincent) The JSON's outermost shape is a LIST [ ... ], so we decode
+        // "an array of NominatimPlace". Decoding NominatimPlace.self (one place) would
+        // throw a type mismatch: expected { but found [.
         let decoded = try JSONDecoder().decode([NominatimPlace].self, from: data)
-        // -------------------------------------------------------------------
 
         // STEP 5: map raw places -> RestaurantResult, skipping anything unusable.
         let here = CLLocation(latitude: coordinate.latitude, longitude: coordinate.longitude)

@@ -19,11 +19,20 @@ import SwiftData
 //      total. That leftover goes to the bill owner, so the shares always add up exactly.
 
 /// How the bill is divided. Shown in the split-method picker.
+/// Raw values are what gets saved in Bill.splitMethodRaw, so they must never change.
+/// `label` is what the user sees and can change freely.
 enum SplitMethod: String, CaseIterable, Identifiable {
-    case byItems = "By Items"
-    case evenly = "Evenly"
+    case byItems
+    case evenly
 
     var id: Self { self }
+
+    var label: String {
+        switch self {
+        case .byItems: return "By Items"
+        case .evenly:  return "Evenly"
+        }
+    }
 }
 
 /// One person's breakdown. Bill Summary and Person Summary display these.
@@ -58,7 +67,9 @@ enum SplitCalculator {
     }
 
     /// The main entry point: what each person on the bill owes.
-    static func shares(for bill: Bill, method: SplitMethod = .byItems) -> [PersonShare] {
+    /// Uses the bill's saved split method unless a specific one is passed in.
+    static func shares(for bill: Bill, method: SplitMethod? = nil) -> [PersonShare] {
+        let method = method ?? bill.splitMethod
         let people = bill.people
         guard !people.isEmpty else { return [] }
 
@@ -72,7 +83,16 @@ enum SplitCalculator {
         switch method {
         case .evenly:
             // Everyone pays the same slice of the subtotal, regardless of what they ordered.
-            let slice = subtotal / Decimal(people.count)
+            // ---------------------------------------------------------------
+            // YOUR TURN (1 line): each person's equal slice of the food.
+            //   Example: $30 subtotal, 2 people -> $15 each.
+            //   people.count is an Int and subtotal is a Decimal. Swift won't divide a
+            //   Decimal by an Int, so wrap the count: Decimal(people.count).
+            //   (No divide-by-zero worry: the guard at the top already returned if people is empty.)
+            // Delete the #warning and the placeholder when done.
+            #warning("YOUR TURN: write the evenly-split slice")
+            let slice: Decimal = 0
+            // ---------------------------------------------------------------
             for person in people { rawItems[person.persistentModelID] = slice }
 
         case .byItems:

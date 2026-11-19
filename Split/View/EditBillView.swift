@@ -21,6 +21,8 @@ struct EditBillView: View {
     @State private var taxText = ""
     //opens the Select Restaurant sheet (map + API results).
     @State private var showRestaurantPicker = false
+    //opens the Tip sheet (presets, custom %, custom $).
+    @State private var showTipSheet = false
 
     init(bill: Bill, context: ModelContext) {
         _viewModel = State(initialValue: EditBillViewModel(bill: bill, context: context))
@@ -171,6 +173,39 @@ struct EditBillView: View {
                     Text(error).font(.caption).foregroundStyle(.red)
                 }
 
+                //--- Tip: tap to open the Tip sheet ---
+                Button { showTipSheet = true } label: {
+                    HStack {
+                        Text("Tip").foregroundStyle(.primary)
+                        Spacer()
+                        if viewModel.bill.tipAmount > 0 {
+                            Text("\(viewModel.bill.tipPercent.formatted(.number.precision(.fractionLength(0...1))))% · \(viewModel.bill.tipAmount.formatted(.currency(code: "USD")))")
+                                .foregroundStyle(.secondary)
+                        } else {
+                            Text("Add tip").foregroundStyle(.orange)
+                        }
+                        Image(systemName: "chevron.right")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .buttonStyle(.plain)
+
+                Divider()
+
+                //--- Total = subtotal + tax + tip (same function the split uses) ---
+                HStack {
+                    Text("Total").font(.headline)
+                    Spacer()
+                    Text(SplitCalculator.grandTotal(viewModel.bill), format: .currency(code: "USD"))
+                        .font(.headline)
+                }
+
+                //--- Split method + what each person owes ---
+                //shows "Add people..." until the Add People screen (Mia) adds people.
+                SplitBreakdownView(bill: viewModel.bill, context: context)
+                    .padding(.top, 8)
+
                 Spacer(minLength: 10)
             }
             .padding()
@@ -196,6 +231,9 @@ struct EditBillView: View {
         }
         .sheet(isPresented: $showRestaurantPicker) {
             SelectRestaurantView(bill: viewModel.bill, context: context)
+        }
+        .sheet(isPresented: $showTipSheet) {
+            TipView(bill: viewModel.bill, context: context)
         }
         //load the saved tax mode/value so reopening a bill shows what was entered
         .onAppear {
