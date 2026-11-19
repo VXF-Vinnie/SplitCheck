@@ -139,8 +139,8 @@ struct RestaurantService {
         // with a key inside, or a list [ ] of places? How do you write
         // "a list of NominatimPlace" as a Swift type?
         // Delete the #warning and the placeholder line when done.
-        #warning("YOUR TURN: write the JSONDecoder line for Nominatim")
-        let decoded: [NominatimPlace] = []
+        
+        let decoded = try JSONDecoder().decode([NominatimPlace].self, from: data)
         // -------------------------------------------------------------------
 
         // STEP 5: map raw places -> RestaurantResult, skipping anything unusable.
