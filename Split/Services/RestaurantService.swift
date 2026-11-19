@@ -3,54 +3,55 @@ import CoreLocation
 
 // MARK: - RestaurantService
 //
-// WHAT IT DOES: calls the Overpass API (a free web service over OpenStreetMap data)
-// with the user's coordinates and turns the JSON it returns into [RestaurantResult].
+// WHAT IT DOES: calls the Nominatim API (OpenStreetMap's official search service)
+// with a box around the user's coordinates and turns the JSON it returns into
+// [RestaurantResult].
 //
 // RUBRIC: "Web API calls" (5 pts) = the URLSession request below.
 //         "Process JSON" (10 pts) = decoding into OUR OWN Codable structs with
 //         JSONDecoder (no third-party library), then mapping them to RestaurantResult.
 //
-// WHY OVERPASS: no API key, so a fresh clone on the grader's Mac works with no setup.
+// WHY NOMINATIM: no API key (a fresh clone works with no setup), and it runs on
+// OpenStreetMap's own servers. We first used the Overpass API, but its volunteer
+// servers kept timing out, so we tested both with curl and switched.
 
-// MARK: - JSON shape (mirrors what Overpass sends back)
+// MARK: - JSON shape (mirrors what Nominatim sends back)
 //
-// Example response (trimmed):
-// {
-//   "elements": [
-//     { "type": "node", "id": 123, "lat": 33.42, "lon": -111.93,
-//       "tags": { "name": "Taco Spot", "addr:street": "Mill Ave", "addr:housenumber": "500" } },
-//     { "type": "way", "id": 456, "center": { "lat": 33.41, "lon": -111.94 },
-//       "tags": { "name": "Burger Barn" } }
-//   ]
-// }
+// Real response from a test in Tempe (trimmed):
+// [
+//   { "osm_id": 544152063, "lat": "33.4162856", "lon": "-111.9259077",
+//     "name": "Thai Basil",
+//     "display_name": "Thai Basil, 1111, South Rural Road, Tempe, Maricopa County, Arizona, 85281, United States" },
+//   { "osm_id": 9458969167, "lat": "33.4151188", "lon": "-111.9239872",
+//     "name": "Pho Fresh Alley and Boba Tea", "display_name": "..." }
+// ]
 //
-// Property names must match the JSON keys exactly; that's how Codable knows what goes where.
-// Anything that might be missing is Optional (?), or decoding the whole response fails.
+// Two things to notice:
+//   1. The response STARTS WITH [ : the top level is a list, not an object.
+//   2. lat and lon are STRINGS ("33.41..."), not numbers. We decode them as String
+//      and convert to Double ourselves.
 
-struct OverpassResponse: Decodable {
-    let elements: [OverpassElement]
-}
+struct NominatimPlace: Decodable {
+    let osmID: Int
+    let lat: String
+    let lon: String
+    let name: String?        // some places have no name -> Optional
+    let displayName: String
 
-struct OverpassElement: Decodable {
-    let id: Int
-    // A "node" (a single point) has lat/lon directly...
-    let lat: Double?
-    let lon: Double?
-    // ...a "way" (a building outline) has a center point instead.
-    let center: Center?
-    // Free-form key/value labels added by volunteers. Not every place has every tag.
-    let tags: [String: String]?
-
-    struct Center: Decodable {
-        let lat: Double
-        let lon: Double
+    // CodingKeys maps JSON key names to our Swift property names.
+    // The JSON uses snake_case ("display_name"); Swift style is camelCase (displayName).
+    // Keys that already match (lat, lon, name) are listed as-is.
+    enum CodingKeys: String, CodingKey {
+        case osmID = "osm_id"
+        case lat, lon, name
+        case displayName = "display_name"
     }
 }
 
 // MARK: - What the app actually uses
 
 /// A clean, app-friendly restaurant. The View and ViewModel only ever see this,
-/// never the raw Overpass structs, so switching APIs later only changes this file.
+/// never the raw API structs, so switching APIs only changed this file.
 struct RestaurantResult: Identifiable, Hashable {
     let id: Int
     let name: String
@@ -85,54 +86,78 @@ enum RestaurantError: LocalizedError {
 // MARK: - The service
 
 struct RestaurantService {
-    // Overpass is run by volunteers on a few public servers. The main one is sometimes
-    // overloaded and times out, so we try it first and fall back to a mirror.
-    // Same API, same JSON; only the address differs.
-    private let endpoints = [
-        "https://overpass-api.de/api/interpreter",
-        "https://overpass.private.coffee/api/interpreter"
-    ]
+    private let endpoint = "https://nominatim.openstreetmap.org/search"
 
-    /// Restaurants within `radiusMeters` of `coordinate`, closest first.
-    func fetchRestaurants(near coordinate: CLLocationCoordinate2D,
-                          radiusMeters: Int = 2000) async throws -> [RestaurantResult] {
+    /// Restaurants near `coordinate`, closest first.
+    func fetchRestaurants(near coordinate: CLLocationCoordinate2D) async throws -> [RestaurantResult] {
 
-        // STEP 1: build the query. Overpass has its own query language (Overpass QL).
-        // In English: "give me JSON; find nodes/ways/relations (nwr) tagged as a restaurant,
-        // fast food place or cafe within RADIUS meters of LAT,LON; output each with a
-        // center point; at most 50."
-        // The coordinates come from LocationService, never typed in by us.
-        let query = """
-        [out:json][timeout:10];
-        nwr["amenity"~"^(restaurant|fast_food|cafe)$"](around:\(radiusMeters),\(coordinate.latitude),\(coordinate.longitude));
-        out center 50;
-        """
+        // STEP 1: build a search box around the user. 0.02 degrees is about 2 km.
+        // Nominatim wants the box as "left,top,right,bottom" = "minLon,maxLat,maxLon,minLat".
+        // Every number here is computed from the user's real location.
+        let delta = 0.02
+        let viewbox = [
+            coordinate.longitude - delta,   // left (west)
+            coordinate.latitude + delta,    // top (north)
+            coordinate.longitude + delta,   // right (east)
+            coordinate.latitude - delta     // bottom (south)
+        ].map { String($0) }.joined(separator: ",")
 
-        // STEPS 2 + 3: send the request, trying each server until one answers.
-        let data = try await send(query)
+        // STEP 2: build the URL. URLComponents handles escaping for us.
+        //   q=restaurant  -> search for restaurants
+        //   format=jsonv2 -> reply in JSON
+        //   viewbox + bounded=1 -> only inside our box
+        //   limit=40      -> Nominatim's maximum per request
+        var components = URLComponents(string: endpoint)!
+        components.queryItems = [
+            URLQueryItem(name: "q", value: "restaurant"),
+            URLQueryItem(name: "format", value: "jsonv2"),
+            URLQueryItem(name: "viewbox", value: viewbox),
+            URLQueryItem(name: "bounded", value: "1"),
+            URLQueryItem(name: "limit", value: "40")
+        ]
+        guard let url = components.url else { throw RestaurantError.badResponse }
+
+        var request = URLRequest(url: url)
+        // Nominatim's usage policy requires apps to identify themselves.
+        request.setValue("Split-CSE335-student-project", forHTTPHeaderField: "User-Agent")
+        request.timeoutInterval = 15
+
+        // STEP 3: the network call (the 5-point line). `await` pauses here without
+        // freezing the UI until the server answers.
+        let (data, response) = try await URLSession.shared.data(for: request)
+
+        // 200 = OK. Anything else (429 = too many requests, 503 = busy) is a failure.
+        guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
+            throw RestaurantError.badResponse
+        }
 
         // STEP 4: decode the JSON bytes into our structs (the 10-point line).
-        // (written by Vincent) "Decode the bytes in `data` as an OverpassResponse."
-        // We decode the OUTERMOST shape (the object holding `elements`), then step 5
-        // walks through decoded.elements one restaurant at a time.
-        // If the JSON doesn't match the structs, this throws and the user sees an error.
-        let decoded = try JSONDecoder().decode(OverpassResponse.self, from: data)
+        // -------------------------------------------------------------------
+        // YOUR TURN (1 line), round 2. Same shape as your Overpass line:
+        //   let decoded = try JSONDecoder().decode(______.self, from: data)
+        // But look at the JSON above: what's the OUTERMOST thing now? An object { }
+        // with a key inside, or a list [ ] of places? How do you write
+        // "a list of NominatimPlace" as a Swift type?
+        // Delete the #warning and the placeholder line when done.
+        #warning("YOUR TURN: write the JSONDecoder line for Nominatim")
+        let decoded: [NominatimPlace] = []
+        // -------------------------------------------------------------------
 
-        // STEP 5: map raw elements -> RestaurantResult, skipping anything unusable.
+        // STEP 5: map raw places -> RestaurantResult, skipping anything unusable.
         let here = CLLocation(latitude: coordinate.latitude, longitude: coordinate.longitude)
 
-        let results: [RestaurantResult] = decoded.elements.compactMap { element in
-            // compactMap = map, but returning nil drops that element.
-            guard let name = element.tags?["name"], !name.isEmpty else { return nil }   // unnamed place
-            // Node -> use lat/lon. Way -> use center. Neither -> can't put it on a map.
-            guard let lat = element.lat ?? element.center?.lat,
-                  let lon = element.lon ?? element.center?.lon else { return nil }
+        let results: [RestaurantResult] = decoded.compactMap { place in
+            // compactMap = map, but returning nil drops that place.
+            guard let name = place.name, !name.isEmpty else { return nil }   // unnamed place
+            // lat/lon arrive as text. Double("33.41") turns text into a number,
+            // and gives nil if the text isn't a valid number.
+            guard let lat = Double(place.lat), let lon = Double(place.lon) else { return nil }
 
             let distance = here.distance(from: CLLocation(latitude: lat, longitude: lon))
             return RestaurantResult(
-                id: element.id,
+                id: place.osmID,
                 name: name,
-                address: Self.address(from: element.tags ?? [:]),
+                address: Self.shortAddress(from: place.displayName),
                 latitude: lat,
                 longitude: lon,
                 distanceMeters: distance
@@ -143,50 +168,19 @@ struct RestaurantService {
         return results.sorted { $0.distanceMeters < $1.distanceMeters }
     }
 
-    /// Sends the query to the first server that answers with 200 OK and returns the raw bytes.
-    private func send(_ query: String) async throws -> Data {
-        for endpoint in endpoints {
-            // Put the query in the URL as ?data=... URLComponents handles the
-            // escaping of spaces, quotes and brackets for us.
-            var components = URLComponents(string: endpoint)!
-            components.queryItems = [URLQueryItem(name: "data", value: query)]
-            guard let url = components.url else { continue }
+    /// "Thai Basil, 1111, South Rural Road, Tempe, Maricopa County, ..." -> "1111 South Rural Road, Tempe"
+    /// The first part is the restaurant's own name, so skip it, then keep street + city.
+    private static func shortAddress(from displayName: String) -> String {
+        var parts = displayName
+            .split(separator: ",")
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+        guard parts.count > 1 else { return displayName }
+        parts.removeFirst()   // drop the name
 
-            var request = URLRequest(url: url)
-            // Overpass asks apps to identify themselves; it's a shared free server.
-            request.setValue("Split-CSE335-student-project", forHTTPHeaderField: "User-Agent")
-            // Give up on a slow server after 12s so the mirror still has time.
-            request.timeoutInterval = 12
-
-            do {
-                // The network call (the 5-point line). `await` pauses here without
-                // freezing the UI until the server answers.
-                let (data, response) = try await URLSession.shared.data(for: request)
-
-                // 200 = OK. Anything else (429 = too many requests, 504 = busy) -> try the next server.
-                if let http = response as? HTTPURLResponse, http.statusCode == 200 {
-                    return data
-                }
-            } catch {
-                // Timeout or connection error on this server -> try the next one.
-                continue
-            }
+        // If it starts with a house number, glue it to the street: "1111" + "South Rural Road".
+        if parts.count >= 3, Int(parts[0]) != nil {
+            return "\(parts[0]) \(parts[1]), \(parts[2])"
         }
-        // Every server failed.
-        throw RestaurantError.badResponse
-    }
-
-    /// Builds "500 Mill Ave, Tempe" from whatever address tags exist.
-    /// Volunteers often skip these, so fall back to the cuisine or a generic label.
-    private static func address(from tags: [String: String]) -> String {
-        let street = [tags["addr:housenumber"], tags["addr:street"]]
-            .compactMap { $0 }
-            .joined(separator: " ")
-        let parts = [street, tags["addr:city"] ?? ""].filter { !$0.isEmpty }
-        if !parts.isEmpty { return parts.joined(separator: ", ") }
-        if let cuisine = tags["cuisine"] {
-            return cuisine.replacingOccurrences(of: "_", with: " ").capitalized
-        }
-        return "Address not listed"
+        return parts.prefix(2).joined(separator: ", ")
     }
 }
