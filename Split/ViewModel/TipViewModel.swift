@@ -3,27 +3,17 @@ import Observation
 import SwiftData
 
 // MARK: - TipViewModel
-//
-// The Tip screen's logic. The user can pick a preset (18/20/25%), type a custom
-// percent, or type an exact dollar amount. Whichever one they enter, we calculate
-// the other, so Bill always has BOTH tipPercent and tipAmount filled in
-// (that was "Decision 2" in the Bill model).
-//
-// Tip is calculated on the SUBTOTAL (food only), not on subtotal + tax.
-// That's the common US convention and what most receipts' tip guides use.
-//
-// Same rule as tax:
-//   - percent mode -> tipIsPercent = true, and EditBillViewModel recalculates the
-//     dollars whenever items change (20% of a bigger bill is a bigger tip).
-//   - dollar mode  -> tipIsPercent = false, and the dollars stay fixed.
+// Tip screen logic. User enters a percent OR dollars; we calculate the other,
+// so Bill always has both tipPercent and tipAmount.
+// Tip is on the subtotal (before tax). Like tax: a percent tip follows the
+// subtotal when items change; a dollar tip stays fixed.
 
 @Observable
 final class TipViewModel {
     let presets: [Decimal] = [18, 20, 25]
     var errorMessage: String?
 
-    // The Bill is a SwiftData @Model, which is already observable, so SwiftUI
-    // still redraws when bill.tipAmount changes even though we ignore it here.
+    // Bill is a SwiftData model, so the View still updates when it changes.
     @ObservationIgnored private let bill: Bill
     @ObservationIgnored private let context: ModelContext
 
@@ -79,17 +69,9 @@ final class TipViewModel {
         bill.tipIsPercent = false
         bill.tipAmount = dollars.roundedToCents()
 
-        // -------------------------------------------------------------------
-        // YOUR TURN (1 line): work out what percent of the subtotal this tip is,
-        // so the screen can show "Tip: 15% · $6.00" even when dollars were typed.
-        //   It's the reverse of percent -> dollars:  $6 tip on a $40 subtotal = 15%.
-        //   Think about your `ratio` line in SplitCalculator: part / whole, but then
-        //   turn the fraction into a percent number (0.15 -> 15).
-        //   Same divide-by-zero guard as `ratio`: if subtotal is 0, use 0.
-        //   Shape: bill.tipPercent = ______ ? ______ : 0
-        // Delete the #warning when done.
-        #warning("YOUR TURN: set bill.tipPercent from the dollar amount")
-        // -------------------------------------------------------------------
+        // VINCENT'S LINE (task 4): dollars -> percent, the reverse of the tax line.
+        // $6 tip / $40 subtotal = 0.15, x 100 = 15%. Same zero guard as `ratio`.
+        bill.tipPercent = subtotal > 0 ? (bill.tipAmount / subtotal * 100).roundedToCents() : 0
 
         return save()
     }

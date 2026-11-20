@@ -2,13 +2,9 @@ import SwiftUI
 import SwiftData
 
 // MARK: - SplitBreakdownView
-//
-// A reusable block: split-method picker + one row per person (items, tax, tip, total).
-// It's a VStack (not a List) so it can sit inside any scrolling screen.
-// Shown on Edit Bill now; Mia can drop the same view into Bill Summary.
-//
-// To check the math without the Add People screen, open this file in Xcode and look
-// at the canvas preview (Editor > Canvas). It uses the Alex & Sam example.
+// Split-method picker + one row per person (items, tax, tip, total).
+// Reusable: Mia can put this in Bill Summary.
+// Check the math in Xcode's canvas preview (Alex & Sam example) at the bottom.
 
 struct SplitBreakdownView: View {
     @State private var viewModel: SplitViewModel

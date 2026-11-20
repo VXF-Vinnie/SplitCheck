@@ -82,17 +82,11 @@ enum SplitCalculator {
 
         switch method {
         case .evenly:
-            // Everyone pays the same slice of the subtotal, regardless of what they ordered.
-            // ---------------------------------------------------------------
-            // YOUR TURN (1 line): each person's equal slice of the food.
-            //   Example: $30 subtotal, 2 people -> $15 each.
-            //   people.count is an Int and subtotal is a Decimal. Swift won't divide a
-            //   Decimal by an Int, so wrap the count: Decimal(people.count).
-            //   (No divide-by-zero worry: the guard at the top already returned if people is empty.)
-            // Delete the #warning and the placeholder when done.
-            #warning("YOUR TURN: write the evenly-split slice")
-            let slice: Decimal = 0
-            // ---------------------------------------------------------------
+            // Everyone pays the same slice of the food, no matter what they ordered.
+            // VINCENT'S LINE (task 5): $30 subtotal / 2 people = $15 each.
+            // Decimal(people.count) because Swift can't divide a Decimal by an Int.
+            // No divide-by-zero: the guard at the top returns early if there are no people.
+            let slice = subtotal / Decimal(people.count)
             for person in people { rawItems[person.persistentModelID] = slice }
 
         case .byItems:
