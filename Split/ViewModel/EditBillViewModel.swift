@@ -26,31 +26,37 @@ final class EditBillViewModel {
         bill.items.sorted { $0.createdAt < $1.createdAt }
     }
 
-    /// Sum of item prices, before tax and tip.
+    /// Sum of price x quantity, before tax and tip.
+    /// Delegates to SplitCalculator so Edit Bill and the summaries can never disagree.
     var subtotal: Decimal {
-        bill.items.reduce(0) { $0 + $1.price }
+        SplitCalculator.subtotal(bill)
     }
 
     // MARK: - Add
 
     @discardableResult
-    func addItem(name: String, price: Decimal) -> Bool {
+    func addItem(name: String, price: Decimal, quantity: Int = 1) -> Bool {
         guard let cleanName = validate(name: name, price: price) else { return false }
 
-        let item = Item(name: cleanName, price: price)
+        let item = Item(name: cleanName, price: price, quantity: quantity)
         context.insert(item)
         bill.items.append(item)
+        recalculateTax()   // subtotal changed, so a percent tax must change too
+        recalculateTip()   // ...and so must a percent tip
         return save()
     }
 
     // MARK: - Edit
 
     @discardableResult
-    func editItem(_ item: Item, name: String, price: Decimal) -> Bool {
+    func editItem(_ item: Item, name: String, price: Decimal, quantity: Int = 1) -> Bool {
         guard let cleanName = validate(name: name, price: price) else { return false }
 
         item.name = cleanName
         item.price = price
+        item.quantity = quantity
+        recalculateTax()
+        recalculateTip()
         return save()
     }
 
@@ -59,6 +65,8 @@ final class EditBillViewModel {
     func deleteItem(_ item: Item) {
         bill.items.removeAll { $0.persistentModelID == item.persistentModelID }
         context.delete(item)
+        recalculateTax()
+        recalculateTip()
         save()
     }
 
@@ -68,6 +76,52 @@ final class EditBillViewModel {
         for index in offsets {
             deleteItem(current[index])
         }
+    }
+
+    // MARK: - Tax
+
+    /// Called by the Tax field. `input` means a percent (8.6) or dollars (4.30)
+    /// depending on the %/Amount toggle. Returns false and sets errorMessage if invalid.
+    @discardableResult
+    func setTax(_ input: Decimal, isPercent: Bool) -> Bool {
+        guard input >= 0 else {
+            errorMessage = "Tax can't be negative."
+            return false
+        }
+        // Sanity cap to catch typos like 86 instead of 8.6. No US sales tax is near 30%.
+        if isPercent && input > 30 {
+            errorMessage = "Tax rate looks too high. Enter a percent like 8.6."
+            return false
+        }
+
+        bill.taxIsPercent = isPercent
+        if isPercent {
+            bill.taxRate = input       // remember the rate...
+            recalculateTax()           // ...and turn it into dollars
+        } else {
+            bill.tax = input.roundedToCents()  // dollars typed directly; a fixed amount
+        }
+        return save()
+    }
+
+    /// Keeps a percent-based tax correct when the subtotal changes.
+    /// Example: 10% on $40 = $4.00. Add a $20 item -> 10% on $60 = $6.00.
+    /// In Amount mode we do nothing: a dollar figure copied off a receipt doesn't change.
+    private func recalculateTax() {
+        guard bill.taxIsPercent else { return }
+
+        // (written by Vincent) Percent means "per hundred": 8.25% = 8.25 / 100 = 0.0825.
+        // $40 subtotal x 8.25 / 100 = $3.30.
+        // Round ONCE, at the end, on the dollar result. Rounding the rate first
+        // (0.0825 -> 0.08) would give $3.20, which is wrong.
+        bill.tax = (subtotal * bill.taxRate / 100).roundedToCents()
+    }
+
+    /// Same rule as tax: a percent tip follows the subtotal; a fixed-dollar tip doesn't.
+    /// (TipViewModel sets the tip; this only keeps it correct when items change.)
+    private func recalculateTip() {
+        guard bill.tipIsPercent else { return }
+        bill.tipAmount = (subtotal * bill.tipPercent / 100).roundedToCents()
     }
 
     // MARK: - Helpers

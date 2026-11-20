@@ -37,6 +37,8 @@ struct AddEditItemView: View {
     @State private var name: String = ""
     //raw digits the user has typed. these are read as cents, so "1299" = $12.99.
     @State private var amountDigits: String = ""
+    //how many of this item (2 burgers = quantity 2). Stepper keeps it 1...99.
+    @State private var quantity: Int = 1
     //shows an alert if the ViewModel rejects the input.
     @State private var showError = false
 
@@ -77,6 +79,10 @@ struct AddEditItemView: View {
                     }
                     .frame(width: 130)
                 }
+
+                //quantity stepper. price above is the UNIT price; the row on
+                //Edit Bill shows "2 × $5.00" and the line total.
+                Stepper("Quantity: \(quantity)", value: $quantity, in: 1...99)
             }
             .navigationTitle(isEditing ? "Edit Item" : "Add Item")
             .navigationBarTitleDisplayMode(.inline)
@@ -97,6 +103,7 @@ struct AddEditItemView: View {
             .onAppear {
                 if let item = editingItem {
                     name = item.name
+                    quantity = item.quantity
                     let totalCents = NSDecimalNumber(decimal: item.price * 100).intValue
                     amountDigits = totalCents == 0 ? "" : String(totalCents)
                 }
@@ -107,8 +114,8 @@ struct AddEditItemView: View {
     //decides add vs. edit, then calls the ViewModel.
     private func save() {
         let ok = isEditing
-            ? viewModel.editItem(editingItem!, name: name, price: priceDecimal)
-            : viewModel.addItem(name: name, price: priceDecimal)
+            ? viewModel.editItem(editingItem!, name: name, price: priceDecimal, quantity: quantity)
+            : viewModel.addItem(name: name, price: priceDecimal, quantity: quantity)
         if ok { dismiss() } else { showError = true }
     }
 }
