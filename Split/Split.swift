@@ -6,6 +6,6 @@ import SwiftData
         WindowGroup {
             ContentView()
         }
-        .modelContainer(for: [Bill.self, Item.self, Person.self, Restaurant.self])
+        .modelContainer(for: [Bill.self, Item.self, Person.self, Restaurant.self, SavedPerson.self])
     }
 }

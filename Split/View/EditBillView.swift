@@ -5,6 +5,13 @@
 //  Created by Mia Nguyen on 10/23/26.
 //
 
+//
+//  EditBillView.swift
+//  Split
+//
+//  Created by Mia Nguyen on 10/23/26.
+//
+
 import SwiftUI
 import SwiftData
 
@@ -12,20 +19,19 @@ struct EditBillView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var context
 
+    //shared navigation path so "Next: Add People" can push the next screen.
+    @Binding var path: NavigationPath
+
     @State private var viewModel: EditBillViewModel
     @State private var editorMode: ItemEditorMode?
-    //%/Amount toggle. Starts from what the bill saved (see .onAppear).
     @State private var taxIsPercent = true
-    //what the user typed in the tax field, as text. The ViewModel turns it into
-    //a Decimal and decides whether it's a percent or dollars.
     @State private var taxText = ""
-    //opens the Select Restaurant sheet (map + API results).
     @State private var showRestaurantPicker = false
-    //opens the Tip sheet (presets, custom %, custom $).
     @State private var showTipSheet = false
 
-    init(bill: Bill, context: ModelContext) {
+    init(bill: Bill, context: ModelContext, path: Binding<NavigationPath>) {
         _viewModel = State(initialValue: EditBillViewModel(bill: bill, context: context))
+        _path = path
     }
 
     var body: some View {
@@ -54,7 +60,6 @@ struct EditBillView: View {
                 }
 
                 //--- Restaurant: tap to open the map sheet ---
-                //shows the saved restaurant (from SwiftData) once one is picked.
                 Button { showRestaurantPicker = true } label: {
                     HStack(spacing: 12) {
                         Image(systemName: "mappin.and.ellipse")
@@ -93,7 +98,6 @@ struct EditBillView: View {
                             HStack {
                                 VStack(alignment: .leading, spacing: 2) {
                                     Text(item.name).foregroundStyle(.primary)
-                                    //only show "2 × $5.00" when there's more than one
                                     if item.quantity > 1 {
                                         Text("\(item.quantity) × \(item.price.formatted(.currency(code: "USD")))")
                                             .font(.caption)
@@ -101,10 +105,8 @@ struct EditBillView: View {
                                     }
                                 }
                                 Spacer()
-                                //line total = price × quantity (computed, not stored)
                                 Text(SplitCalculator.lineTotal(item), format: .currency(code: "USD"))
                                     .foregroundStyle(.secondary)
-                                //pencil opens the edit sheet for this item
                                 Button { editorMode = .edit(item) } label: {
                                     Image(systemName: "pencil")
                                         .foregroundStyle(.secondary)
@@ -142,7 +144,7 @@ struct EditBillView: View {
                     Text(viewModel.subtotal, format: .currency(code: "USD"))
                 }
 
-                //--- Tax: toggle picks what the field means, label shows dollars ---
+                //--- Tax ---
                 HStack(spacing: 12) {
                     Text("Tax")
                     Picker("", selection: $taxIsPercent) {
@@ -159,16 +161,12 @@ struct EditBillView: View {
                         .textFieldStyle(.roundedBorder)
 
                     Spacer()
-                    //always the DOLLAR amount, so the user can check the math
                     Text(viewModel.bill.tax, format: .currency(code: "USD"))
                         .foregroundStyle(.secondary)
                 }
-                //every keystroke or toggle flip goes to the ViewModel.
-                //the View never does the % math itself (that's the ViewModel's job).
                 .onChange(of: taxText) { _, _ in applyTax() }
                 .onChange(of: taxIsPercent) { _, _ in applyTax() }
 
-                //validation message from the ViewModel (e.g. "Tax can't be negative")
                 if let error = viewModel.errorMessage {
                     Text(error).font(.caption).foregroundStyle(.red)
                 }
@@ -193,7 +191,7 @@ struct EditBillView: View {
 
                 Divider()
 
-                //--- Total = subtotal + tax + tip (same function the split uses) ---
+                //--- Total ---
                 HStack {
                     Text("Total").font(.headline)
                     Spacer()
@@ -201,8 +199,7 @@ struct EditBillView: View {
                         .font(.headline)
                 }
 
-                //--- Split method + what each person owes ---
-                //shows "Add people..." until the Add People screen (Mia) adds people.
+                //--- Split method + per-person preview (fills in after people are added) ---
                 SplitBreakdownView(bill: viewModel.bill, context: context)
                     .padding(.top, 8)
 
@@ -211,19 +208,22 @@ struct EditBillView: View {
             .padding()
         }
         .toolbar(.hidden, for: .navigationBar)
-        //--- bottom button (Add People is Phase II, so no action yet) ---
+        .midnightScreen()
+        //--- Next: Add People (wired). disabled until there's at least one item ---
         .safeAreaInset(edge: .bottom) {
             Button {
-                //TODO: navigate to Add People once that screen exists
+                path.append(BillRoute.addPeople(viewModel.bill))
             } label: {
                 Text("Next: Add People")
                     .font(.headline)
                     .foregroundStyle(.white)
                     .frame(maxWidth: .infinity)
                     .padding()
-                    .background(RoundedRectangle(cornerRadius: 14).fill(Color.primary))
+                    .background(RoundedRectangle(cornerRadius: 14).fill(Color.brandAccent))
             }
             .buttonStyle(.plain)
+            .disabled(viewModel.sortedItems.isEmpty)
+            .opacity(viewModel.sortedItems.isEmpty ? 0.5 : 1)
             .padding()
         }
         .sheet(item: $editorMode) { mode in
@@ -235,13 +235,11 @@ struct EditBillView: View {
         .sheet(isPresented: $showTipSheet) {
             TipView(bill: viewModel.bill, context: context)
         }
-        //load the saved tax mode/value so reopening a bill shows what was entered
         .onAppear {
             taxIsPercent = viewModel.bill.taxIsPercent
             let saved = taxIsPercent ? viewModel.bill.taxRate : viewModel.bill.tax
             taxText = saved == 0 ? "" : "\(saved)"
         }
-        //delete the bill if the user leaves without adding items
         .onDisappear {
             if viewModel.bill.items.isEmpty {
                 context.delete(viewModel.bill)
@@ -250,8 +248,6 @@ struct EditBillView: View {
         }
     }
 
-    //turns the typed text into a number and hands it to the ViewModel.
-    //empty field = 0 tax. Decimal(string:) returns nil for junk like "1.2.3".
     private func applyTax() {
         let value = Decimal(string: taxText) ?? 0
         viewModel.setTax(value, isPercent: taxIsPercent)
