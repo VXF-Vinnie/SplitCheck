@@ -4,7 +4,27 @@ import SwiftData
 @Model
 final class Bill {
     var date: Date
-    var tax: Decimal          // Decision 1: one bill-level tax amount
+    var tax: Decimal
+
+    // How the user entered tax. If they typed a percent, we keep the rate so the
+    // dollar amount can be recalculated when items change (10% of a bigger subtotal
+    // is a bigger tax). Defaults keep old saved bills loading (lightweight migration).
+    var taxIsPercent: Bool = true
+    var taxRate: Decimal = 0  // e.g. 8.6 means 8.6%; only used when taxIsPercent
+
+    // Same idea for tip: if the user picked a percent, the tip follows the subtotal.
+    // If they typed exact dollars, the dollars stay fixed.
+    var tipIsPercent: Bool = true
+
+    // How the bill is divided. Stored as text because SwiftData saves simple types;
+    // `splitMethod` below converts it to the SplitMethod enum for the rest of the app.
+    var splitMethodRaw: String = "byItems"
+
+    //Computed (not saved): the enum version of splitMethodRaw.
+    var splitMethod: SplitMethod {
+        get { SplitMethod(rawValue: splitMethodRaw) ?? .byItems }
+        set { splitMethodRaw = newValue.rawValue }
+    }
     var tipPercent: Decimal   // Decision 2: store both...
     var tipAmount: Decimal    // ...and compute whichever the user didn't enter
 

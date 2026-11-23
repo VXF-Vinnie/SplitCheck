@@ -8,47 +8,41 @@
 import SwiftUI
 import SwiftData
 
-//the Previous Bills screen: a history list of every saved bill.
+//the Previous Bills screen: every saved bill. Edit button enables delete; tap reopens Bill Summary.
 struct PreviousBillView: View {
-    //shared navigation history, so tapping a bill can push into the editor.
+    @Environment(\.modelContext) private var context
     @Binding var path: NavigationPath
 
-    //@Query automatically fetches all saved Bills and keeps this list live.
-    //sorted newest-first by date.
     @Query(sort: \Bill.date, order: .reverse) private var bills: [Bill]
 
-    //safety net: only show bills that actually have items, so a stray
-    //empty bill never appears here.
     private var savedBills: [Bill] { bills.filter { !$0.items.isEmpty } }
 
     var body: some View {
         List {
             ForEach(savedBills) { bill in
-                //tapping a past bill reopens it in the item editor.
                 Button {
-                    path.append(bill)
+                    path.append(BillRoute.billSummary(bill))
                 } label: {
-                    HStack {
+                    HStack(spacing: 12) {
+                        BillThumbnail(bill: bill)
                         VStack(alignment: .leading, spacing: 3) {
-                            //restaurant name if one was picked, otherwise a placeholder.
                             Text(bill.restaurant?.name ?? "Untitled bill")
                                 .foregroundStyle(.primary)
-                            //the bill's date.
                             Text(bill.date, format: .dateTime.month().day().year())
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         }
                         Spacer()
-                        //quick total = sum of this bill's item prices.
-                        Text(bill.items.reduce(Decimal(0)) { $0 + $1.price },
-                             format: .currency(code: "USD"))
+                        Text(SplitCalculator.grandTotal(bill), format: .currency(code: "USD"))
                             .foregroundStyle(.secondary)
                     }
                 }
             }
+            .onDelete(perform: deleteBills)
         }
         .navigationTitle("Previous Bills")
-        //empty state when no bills have been saved yet.
+        .toolbar { EditButton() }   //tap "Edit" to delete bills (swipe works too)
+        .midnightScreen()
         .overlay {
             if savedBills.isEmpty {
                 ContentUnavailableView(
@@ -58,5 +52,11 @@ struct PreviousBillView: View {
                 )
             }
         }
+    }
+
+    //delete removes the bill and (via SwiftData cascade) its items and people.
+    private func deleteBills(at offsets: IndexSet) {
+        for index in offsets { context.delete(savedBills[index]) }
+        try? context.save()
     }
 }
