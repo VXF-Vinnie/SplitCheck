@@ -3,8 +3,6 @@ import Observation
 import SwiftData
 import MapKit
 import SwiftUI
-
-// MARK: - RestaurantViewModel
 //
 // The "brain" of the Select Restaurant screen. In MVVM terms:
 //   - It OWNS the screen's state (results, loading, error, camera, selection).
@@ -20,20 +18,20 @@ import SwiftUI
 @Observable
 final class RestaurantViewModel {
 
-    // MARK: State the View reads
+    //State the View reads
 
     var restaurants: [RestaurantResult] = []
     var isLoading = false
     var errorMessage: String?
-    /// The ID of the tapped pin or row. Shared by the map and the list so both highlight.
+    //The ID of the tapped pin or row. Shared by the map and the list so both highlight.
     var selectedID: Int?
-    /// Filters the list by name (handy when 50 places come back).
+    //Filters the list by name (handy when 50 places come back).
     var searchText = ""
 
-    /// Where the map is looking. Starts on the user's location; no coordinates typed in.
+    //Where the map is looking. Starts on the user's location; no coordinates typed in.
     var cameraPosition: MapCameraPosition = .userLocation(fallback: .automatic)
 
-    // MARK: Dependencies
+    //Dependencies
 
     @ObservationIgnored private let locationService = LocationService()
     @ObservationIgnored private let restaurantService = RestaurantService()
@@ -45,9 +43,9 @@ final class RestaurantViewModel {
         self.context = context
     }
 
-    // MARK: Derived
+    //Derived
 
-    /// What the list shows: everything, or only names containing the search text.
+    //What the list shows: everything, or only names containing the search text.
     var filteredRestaurants: [RestaurantResult] {
         let query = searchText.trimmingCharacters(in: .whitespaces)
         guard !query.isEmpty else { return restaurants }
@@ -58,12 +56,12 @@ final class RestaurantViewModel {
         restaurants.first { $0.id == selectedID }
     }
 
-    /// Name of the restaurant already saved on the bill, if any (shown on Edit Bill).
+    //Name of the restaurant already saved on the bill, if any (shown on Edit Bill).
     var currentRestaurantName: String? { bill.restaurant?.name }
 
-    // MARK: Actions
+    //Actions
 
-    /// Location -> API -> results. Called when the screen appears and by Retry.
+    //Location -> API -> results. Called when the screen appears and by Retry.
     func load() async {
         isLoading = true
         errorMessage = nil
@@ -74,7 +72,7 @@ final class RestaurantViewModel {
         do {
             let coordinate = try await locationService.currentLocation()
 
-            // Zoom the map to roughly the 2 km search area around the user.
+            //Zoom the map to roughly the 2 km search area around the user.
             cameraPosition = .region(MKCoordinateRegion(
                 center: coordinate,
                 latitudinalMeters: 4000,
@@ -83,13 +81,13 @@ final class RestaurantViewModel {
 
             restaurants = try await restaurantService.fetchRestaurants(near: coordinate)
         } catch {
-            // LocationError and RestaurantError both carry a user-friendly message.
+            //LocationError and RestaurantError both carry a user-friendly message.
             restaurants = []
             errorMessage = error.localizedDescription
         }
     }
 
-    /// Tapping a row: select it and center the map on it.
+    //Tapping a row: select it and center the map on it.
     func select(_ result: RestaurantResult) {
         selectedID = result.id
         withAnimation {
@@ -101,18 +99,18 @@ final class RestaurantViewModel {
         }
     }
 
-    /// Saves the selected restaurant onto the bill. Returns false if nothing is selected.
+    //Saves the selected restaurant onto the bill. Returns false if nothing is selected.
     @discardableResult
     func confirmSelection() -> Bool {
         guard let result = selectedRestaurant else { return false }
 
-        // Bill has one Restaurant. Replacing it would orphan the old one, so delete it.
+        //Bill has one Restaurant. Replacing it would orphan the old one, so delete it.
         if let old = bill.restaurant {
             context.delete(old)
         }
 
-        // Convert the API struct into our SwiftData model. Every value here,
-        // including latitude/longitude, came from the API response.
+        //Convert the API struct into our SwiftData model. Every value here,
+        //including latitude/longitude, came from the API response.
         let restaurant = Restaurant(
             name: result.name,
             address: result.address,

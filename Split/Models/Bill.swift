@@ -4,7 +4,7 @@ import SwiftData
 @Model
 final class Bill {
     var date: Date
-    var tax: Decimal          // Decision 1: one bill-level tax amount (always DOLLARS)
+    var tax: Decimal
 
     // How the user entered tax. If they typed a percent, we keep the rate so the
     // dollar amount can be recalculated when items change (10% of a bigger subtotal
@@ -20,7 +20,7 @@ final class Bill {
     // `splitMethod` below converts it to the SplitMethod enum for the rest of the app.
     var splitMethodRaw: String = "byItems"
 
-    /// Computed (not saved): the enum version of splitMethodRaw.
+    //Computed (not saved): the enum version of splitMethodRaw.
     var splitMethod: SplitMethod {
         get { SplitMethod(rawValue: splitMethodRaw) ?? .byItems }
         set { splitMethodRaw = newValue.rawValue }

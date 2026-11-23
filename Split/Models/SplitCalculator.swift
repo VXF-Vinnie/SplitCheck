@@ -1,26 +1,9 @@
 import Foundation
 import SwiftData
 
-// MARK: - SplitCalculator
-//
-// WHY THIS FILE EXISTS (say this in Phase III):
-// This is pure business logic: it takes a Bill and returns what each person owes.
-// It has no SwiftUI and no saving in it, so it belongs to the MODEL layer of MVVM.
-// Because it's a plain function of its input, it's easy to unit test, and every
-// screen that shows money (Bill Summary, Person Summary, Tip) gets the same answer.
-//
-// ALGORITHM (the whole thing in four steps):
-//   1. Items: each item's line total (price x quantity) is divided evenly among
-//      the people assigned to it. A person's "items total" is the sum of their pieces.
-//   2. Tax and tip are split PROPORTIONALLY: if you ate 30% of the subtotal,
-//      you pay 30% of the tax and 30% of the tip.
-//   3. Every number is rounded to cents.
-//   4. Rounding can make the pieces add up to a cent more or less than the real
-//      total. That leftover goes to the bill owner, so the shares always add up exactly.
 
-/// How the bill is divided. Shown in the split-method picker.
-/// Raw values are what gets saved in Bill.splitMethodRaw, so they must never change.
-/// `label` is what the user sees and can change freely.
+//Raw values are what gets saved in Bill.splitMethodRaw, so they must never change.
+//`label` is what the user sees and can change freely.
 enum SplitMethod: String, CaseIterable, Identifiable {
     case byItems
     case evenly
@@ -35,15 +18,15 @@ enum SplitMethod: String, CaseIterable, Identifiable {
     }
 }
 
-/// One person's breakdown. Bill Summary and Person Summary display these.
-/// A plain struct (not a SwiftData @Model) because it's computed, never saved.
+//One person's breakdown. Bill Summary and Person Summary display these.
+//A plain struct (not a SwiftData @Model) because it's computed, never saved.
 struct PersonShare: Identifiable {
     let person: Person
     var itemsTotal: Decimal
     var taxShare: Decimal
     var tipShare: Decimal
 
-    /// What this person actually pays.
+    //What this person actually pays.
     var total: Decimal { itemsTotal + taxShare + tipShare }
 
     var id: PersistentIdentifier { person.persistentModelID }
@@ -51,23 +34,23 @@ struct PersonShare: Identifiable {
 
 enum SplitCalculator {
 
-    /// Price x quantity for one item row.
+    //Price x quantity for one item row.
     static func lineTotal(_ item: Item) -> Decimal {
         item.price * Decimal(item.quantity)
     }
 
-    /// Sum of all line totals, before tax and tip.
+    //Sum of all line totals, before tax and tip.
     static func subtotal(_ bill: Bill) -> Decimal {
         bill.items.reduce(0) { $0 + lineTotal($1) }
     }
 
-    /// Subtotal + tax + tip, rounded to cents. The shares must add up to this.
+    //Subtotal + tax + tip, rounded to cents. The shares must add up to this.
     static func grandTotal(_ bill: Bill) -> Decimal {
         (subtotal(bill) + bill.tax + bill.tipAmount).roundedToCents()
     }
 
-    /// The main entry point: what each person on the bill owes.
-    /// Uses the bill's saved split method unless a specific one is passed in.
+    //The main entry point: what each person on the bill owes.
+    //Uses the bill's saved split method unless a specific one is passed in.
     static func shares(for bill: Bill, method: SplitMethod? = nil) -> [PersonShare] {
         let method = method ?? bill.splitMethod
         let people = bill.people
@@ -76,16 +59,12 @@ enum SplitCalculator {
         let subtotal = subtotal(bill)
 
         // STEP 1: unrounded items total per person, keyed by the person's ID.
-        // We keep full precision here and round only at the end, otherwise
-        // rounding errors pile up across many items.
+        //keep full precision here and round only at the end, otherwise rounding errors pile up across many items.
         var rawItems: [PersistentIdentifier: Decimal] = [:]
 
         switch method {
         case .evenly:
-            // Everyone pays the same slice of the food, no matter what they ordered.
-            // VINCENT'S LINE (task 5): $30 subtotal / 2 people = $15 each.
-            // Decimal(people.count) because Swift can't divide a Decimal by an Int.
-            // No divide-by-zero: the guard at the top returns early if there are no people.
+            // No divide by zero: the guard at the top returns early if there are no people.
             let slice = subtotal / Decimal(people.count)
             for person in people { rawItems[person.persistentModelID] = slice }
 
@@ -105,9 +84,7 @@ enum SplitCalculator {
         var result: [PersonShare] = people.map { person in
             let itemsRaw = rawItems[person.persistentModelID] ?? 0
 
-            // Proportional split (written by Vincent). The core idea of the app:
             // whatever fraction of the food you ate, you pay that fraction of tax and tip.
-            // Example: Alex has $20 of a $30 subtotal -> ratio 2/3 -> pays 2/3 of $3 tax = $2.
             // The denominator is the WHOLE subtotal (including this person), so every
             // ratio is between 0 and 1 and all ratios add up to exactly 1.
             // Guard: a bill with no items has subtotal 0; use 0 instead of dividing by zero.
@@ -129,8 +106,7 @@ enum SplitCalculator {
         let sumOfShares = result.reduce(0) { $0 + $1.total }
         let leftover = grandTotal(bill) - sumOfShares
         if leftover != 0 {
-            // Owner absorbs it. If nobody is flagged as owner, use the first person
-            // so the totals still add up.
+            //Owner absorbs it. If nobody is flagged as owner, use the first person so the totals still add up.
             let ownerIndex = result.firstIndex { $0.person.isOwner } ?? 0
             // Put it in tax so the person's item list still matches their items total.
             result[ownerIndex].taxShare += leftover
@@ -140,11 +116,11 @@ enum SplitCalculator {
     }
 }
 
-// MARK: - Decimal rounding
+//Decimal rounding
 
 extension Decimal {
-    /// Rounds to 2 decimal places, half up (12.345 -> 12.35).
-    /// Decimal (not Double) is used for money because Double can't store 0.10 exactly.
+    //Rounds to 2 decimal places, half up (12.345 -> 12.35).
+    //Decimal (not Double) is used for money because Double can't store 0.10 exactly.
     func roundedToCents() -> Decimal {
         var input = self
         var output = Decimal()

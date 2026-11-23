@@ -2,7 +2,7 @@ import SwiftUI
 import SwiftData
 import MapKit
 
-// MARK: - SelectRestaurantView
+//SelectRestaurantView
 //
 // Opened as a sheet from Edit Bill ("Choose restaurant").
 // Top half: MapKit map with the user's dot and a pin per restaurant.
@@ -41,7 +41,7 @@ struct SelectRestaurantView: View {
         }
     }
 
-    // MARK: - Map
+    //Map
 
     private var map: some View {
         // `selection:` links pin taps to viewModel.selectedID through each Marker's .tag.
@@ -59,7 +59,7 @@ struct SelectRestaurantView: View {
         }
     }
 
-    // MARK: - Loading / error / list
+    //Loading / error / list
 
     @ViewBuilder
     private var content: some View {
@@ -98,7 +98,7 @@ struct SelectRestaurantView: View {
         }
     }
 
-    // MARK: - Confirm
+    //Confirm
 
     private var confirmButton: some View {
         Button {

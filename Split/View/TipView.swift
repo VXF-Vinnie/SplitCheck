@@ -1,12 +1,12 @@
 import SwiftUI
 import SwiftData
 
-// MARK: - TipView
+//TipView
 //
 // Opened as a sheet from Edit Bill ("Tip" row).
-//   Quick tip: 18% / 20% / 25% buttons, each showing its dollar amount.
-//   Custom: a %/$ toggle and a text field.
-//   Summary: tip, tax, and the New Total.
+//18% / 20% / 25% buttons, each showing its dollar amount.
+//Custom: a %/$ toggle and a text field.
+//Summary: tip, tax, and the New Total.
 // All math lives in TipViewModel; this View only displays and forwards input.
 
 struct TipView: View {
@@ -120,7 +120,7 @@ struct TipView: View {
         .buttonStyle(.plain)
     }
 
-    /// Sends the custom field to the ViewModel. An empty field changes nothing.
+    //Sends the custom field to the ViewModel. An empty field changes nothing.
     private func applyCustom() {
         let trimmed = customText.trimmingCharacters(in: .whitespaces)
         guard !trimmed.isEmpty else { return }

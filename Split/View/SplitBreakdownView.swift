@@ -1,10 +1,8 @@
 import SwiftUI
 import SwiftData
 
-// MARK: - SplitBreakdownView
+//SplitBreakdownView
 // Split-method picker + one row per person (items, tax, tip, total).
-// Reusable: Mia can put this in Bill Summary.
-// Check the math in Xcode's canvas preview (Alex & Sam example) at the bottom.
 
 struct SplitBreakdownView: View {
     @State private var viewModel: SplitViewModel
@@ -72,12 +70,12 @@ struct SplitBreakdownView: View {
     }
 }
 
-// MARK: - Preview data (Xcode canvas only, never in the real app)
+//Preview data (Xcode canvas only, never in the real app)
 
 #if DEBUG
-/// The Alex & Sam example: a $20 appetizer shared, a $10 drink for Alex, $3 tax, $6 tip.
-/// By Items should show Alex $26.00 (20 + 2 + 4) and Sam $13.00 (10 + 1 + 2).
-/// Evenly should show $19.50 each (15 + 1.50 + 3).
+//The Alex & Sam example: a $20 appetizer shared, a $10 drink for Alex, $3 tax, $6 tip.
+//By Items should show Alex $26.00 (20 + 2 + 4) and Sam $13.00 (10 + 1 + 2).
+//Evenly should show $19.50 each (15 + 1.50 + 3).
 struct SplitPreviewSample {
     let bill: Bill
     let container: ModelContainer

@@ -6,8 +6,7 @@ enum HomeRoute: Hashable {
     case previousBills
 }
 
-//the flow screens. @Model types don't auto-synthesize Hashable for the enum,
-//so we write it ourselves using persistentModelID.
+//the flow screens. @Model types don't auto synthesize Hashable for the enum, so we write it ourselves using persistentModelID.
 enum BillRoute: Hashable {
     case addPeople(Bill)
     case assignItems(Bill)
@@ -63,7 +62,7 @@ struct ContentView: View {
         .tint(.brandAccent)
     }
 
-    //the two-tab main app, shown once the user has entered their name.
+    //the two tab main app, shown once the user has entered their name.
     private var mainTabs: some View {
         TabView {
             //--- Home tab ---
